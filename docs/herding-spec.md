@@ -251,5 +251,5 @@ themselves to the local coordination API; storage and schema ownership; how
 the UI and worker sessions discover their team; generic CLI capabilities and
 account isolation; whether any upstream-compatible plugin or mod surface can
 carry the coordination view; and the remote transport. The experimental
-`experiments/team` CLI demonstrates a subset of tasks and inboxes only: it is
+`experiments/team` CLI demonstrates a subset of tasks, inboxes, findings, and bulletin posts: it is
 not the product, a tested Herdr integration, or a finished supervisor.

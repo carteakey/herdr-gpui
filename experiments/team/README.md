@@ -28,6 +28,12 @@ python3 team.py inbox analyst
 python3 team.py ack analyst 1
 python3 team.py claim analyst 1
 python3 team.py send --from analyst --to lead --task 1 'Parser appears at 0x1234; verifying callers.'
+python3 team.py finding --by analyst --task 1 --evidence '/path/to/report.md' --confidence medium 'Parser identified'
+python3 team.py findings
+python3 team.py post --by analyst --task 1 '@lead Parser identified; see the finding.'
+python3 team.py bulletin
+python3 team.py mentions lead
+python3 team.py ack-mention lead 1
 python3 team.py complete analyst 1 --result 'Evidence and analysis: /path/to/report.md'
 python3 team.py board
 python3 team.py inbox lead
@@ -48,7 +54,7 @@ Workers check their inbox and assigned tasks, claim work, message peers when
 useful, and complete tasks with evidence. Acknowledge a message only after
 reading it; `inbox --all` includes acknowledged messages. Since nothing wakes
 an idle agent, the user must prompt it to check or arrange an explicit polling
-workflow. Results are shared as messages or referenced files.
+workflow. Findings record an author, description, evidence reference, confidence, and optional task. They are append-only in this prototype; corrections can be recorded as additional findings, but are not linked automatically. Evidence references are not checked for existence. Results are shared as messages or referenced files.
 
 `claim` atomically accepts an open unassigned task or one assigned to the
 claimant; only the claimant may complete it. This does not isolate file access
@@ -62,3 +68,18 @@ and an honest uncertain-delivery state: successful terminal input does not
 prove that an agent processed a message. Intercepting arbitrary `@` text inside
 another application's PTY is deliberately not part of this experiment. Remote
 workers, notifications, UI, and any standards bridge are separate decisions.
+
+## Shared bulletin
+
+`post` publishes to the shared bulletin. Use `--reply-to POST_ID` for a reply
+and `--task TASK_ID` to link a task. `bulletin` returns the 200 most recent
+posts. Mention registered names as `@name`, or use `@supervisor` and `@team`
+to notify supervisors or all currently registered members. Mention tokens use
+ASCII letters, digits, underscores and hyphens, and names are case-sensitive.
+Unknown mentions reject the post. The author is not notified of their own post.
+Mention recipients are fixed when a post is created; joining later does not
+create notifications for old posts. `mentions NAME` returns up to 200 pending
+notifications; `--all` includes acknowledged ones. `ack-mention NAME POST_ID`
+acknowledges only that recipient's notification. Reading a bulletin or inbox
+does not acknowledge it. Posts are limited to 4096 UTF-8 bytes. As with direct
+messages, an agent must explicitly check for mentions; they do not wake it.

@@ -8,6 +8,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import bulletin
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS agents (
   name TEXT PRIMARY KEY, role TEXT NOT NULL, pane TEXT
@@ -25,6 +27,11 @@ CREATE TABLE IF NOT EXISTS messages (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS inbox_idx ON messages(recipient, read_at, id);
+CREATE TABLE IF NOT EXISTS findings (
+  id INTEGER PRIMARY KEY, author TEXT NOT NULL REFERENCES agents(name),
+  description TEXT NOT NULL, evidence TEXT NOT NULL, confidence TEXT NOT NULL,
+  task_id INTEGER REFERENCES tasks(id), created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -48,6 +55,19 @@ def parser():
     s = subs.add_parser('complete'); s.add_argument('agent'); s.add_argument('task', type=int)
     s.add_argument('--result', required=True)
     subs.add_parser('board')
+    s = subs.add_parser('finding', help='Record a finding with its evidence and confidence')
+    s.add_argument('--by', required=True); s.add_argument('--evidence', required=True)
+    s.add_argument('--confidence', required=True, choices=('low', 'medium', 'high'))
+    s.add_argument('--task', type=int); s.add_argument('description')
+    subs.add_parser('findings', help='List recorded findings')
+    s = subs.add_parser('post', help='Post to the shared bulletin')
+    s.add_argument('--by', required=True); s.add_argument('--task', type=int)
+    s.add_argument('--reply-to', type=int); s.add_argument('body')
+    subs.add_parser('bulletin', help='Read the shared bulletin')
+    s = subs.add_parser('mentions', help='Read your bulletin mentions')
+    s.add_argument('agent'); s.add_argument('--all', action='store_true')
+    s = subs.add_parser('ack-mention', help='Acknowledge a bulletin mention')
+    s.add_argument('agent'); s.add_argument('post', type=int)
     return p
 
 
@@ -109,6 +129,23 @@ def run(db, args):
         if cur.rowcount != 1:
             raise ValueError('task is not in progress for this agent')
         return {'task_id': args.task, 'status': 'done'}
+    if cmd == 'post':
+        return bulletin.post(db, args.by, args.body, args.task, args.reply_to)
+    if cmd == 'bulletin':
+        return bulletin.feed(db)
+    if cmd == 'mentions':
+        return bulletin.inbox(db, args.agent, args.all)
+    if cmd == 'ack-mention':
+        return bulletin.acknowledge(db, args.agent, args.post)
+    if cmd == 'finding':
+        agent_exists(db, args.by)
+        if not args.description.strip() or not args.evidence.strip():
+            raise ValueError('finding description and evidence must not be empty')
+        cur = db.execute('INSERT INTO findings(author, description, evidence, confidence, task_id) VALUES (?, ?, ?, ?, ?)',
+                         (args.by, args.description, args.evidence, args.confidence, args.task))
+        return {'finding_id': cur.lastrowid}
+    if cmd == 'findings':
+        return [dict(row) for row in db.execute('SELECT * FROM findings ORDER BY id')]
     if cmd == 'board':
         return [dict(row) for row in db.execute('SELECT * FROM tasks ORDER BY id')]
     raise ValueError('unknown command')
@@ -122,7 +159,7 @@ def main():
         with sqlite3.connect(path, timeout=10) as db:
             db.row_factory = sqlite3.Row
             db.execute('PRAGMA foreign_keys=ON')
-            db.executescript(SCHEMA)
+            db.executescript(SCHEMA + bulletin.SCHEMA)
             result = run(db, args)
         print(json.dumps(result, ensure_ascii=False))
     except (OSError, sqlite3.Error, ValueError) as exc:
